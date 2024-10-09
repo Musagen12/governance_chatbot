@@ -1,0 +1,7 @@
+fastapi
+langchain_community
+langchain
+uvicorn
+langchain_chroma
+pydantic
+pathlib
