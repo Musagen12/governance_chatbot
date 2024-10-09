@@ -5,3 +5,4 @@ uvicorn
 langchain_chroma
 pydantic
 pathlib
+pypdf

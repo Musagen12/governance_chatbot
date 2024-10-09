@@ -1,27 +1,27 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from langchain_community.document_loaders.pdf import PyPDFDirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from langchain_chroma import Chroma
 from .get_embeddings import get_embedding_function
-from pathlib import Path
 import os
 import shutil
 
 router = APIRouter()
 
-CHROMA_PATH = "chroma"
-DATA = "/home/colonel/Desktop/dekut_hackathon/data_sources"
+CHROMA_PATH = "chroma"  # Path where Chroma DB will be stored
+DATA_PATH = "/teamspace/studios/this_studio/governance_chatbot/data_sources"  # Directory for document sources
 
 @router.post("/populate_db", status_code=200)
 def populate_chroma_db(reset: bool = False):
-    """Endpoint to populate Chroma DB with .txt files from amazon_comments"""
+    """Endpoint to populate Chroma DB with documents from the specified directory."""
     try:
         if reset:
             print("✨ Clearing Database")
             clear_database()
 
         # Load text documents and split them
-        documents = load_text_documents(DATA)
+        documents = load_documents()
         if not documents:
             return {"message": "No documents found to load"}
 
@@ -33,33 +33,24 @@ def populate_chroma_db(reset: bool = False):
 
     except Exception as e:
         print(f"Error populating database: {e}")
-        return {"message": f"Error populating database: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Error populating database: {str(e)}")
 
-def load_text_documents(directory: str):
-    """Load all .txt files from the specified directory."""
-    documents = []
-    for filename in os.listdir(directory):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(directory, filename)
-            with open(file_path, "r", encoding="utf-8") as file:
-                text = file.read()
-                # Each text is stored as a Document object
-                documents.append(Document(
-                    page_content=text, 
-                    metadata={"source": filename}
-                ))
-    return documents
+def load_documents() -> list[Document]:
+    """Load all documents from the specified directory using PyPDFDirectoryLoader."""
+    document_loader = PyPDFDirectoryLoader(DATA_PATH)
+    return document_loader.load()
 
-def split_documents(documents: list):
+def split_documents(documents: list[Document]) -> list:
     """Split documents into chunks using RecursiveCharacterTextSplitter."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
-        chunk_overlap=80
+        chunk_overlap=80,
+        length_function=len,
+        is_separator_regex=False,
     )
     return text_splitter.split_documents(documents)
 
-
-def add_to_chroma(chunks: list):
+def add_to_chroma(chunks: list[Document]):
     """Add the text chunks to the Chroma DB."""
     embedding_function = get_embedding_function()
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
@@ -76,11 +67,11 @@ def add_to_chroma(chunks: list):
         print(f"👉 Adding new documents: {len(new_chunks)}")  # Debug added documents
         new_chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
         db.add_documents(new_chunks, ids=new_chunk_ids)
+
     else:
         print("✅ No new documents to add")
 
-
-def calculate_chunk_ids(chunks):
+def calculate_chunk_ids(chunks: list[Document]) -> list[Document]:
     """Assign unique IDs to each chunk based on source and chunk index."""
     last_page_id = None
     current_chunk_index = 0
@@ -99,7 +90,6 @@ def calculate_chunk_ids(chunks):
         last_page_id = current_page_id
 
     return chunks
-
 
 def clear_database():
     """Clear the existing Chroma database."""
