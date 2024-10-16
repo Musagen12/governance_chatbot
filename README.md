@@ -1,4 +1,4 @@
-# 📄🚀 LLM Document Analysis API
+# 🚀 LLM Document Analysis API
 
 ## 🌟 Project Overview
 
